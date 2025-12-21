@@ -16,6 +16,7 @@ A full-stack web application that combines real-time chat with **Retrieval-Augme
 ## 🛠️ Tech Stack
 
 ### Backend
+
 - **Framework**: Django 5.2 with Django REST Framework
 - **Database**: SQLite (development) / PostgreSQL (production recommended)
 - **Authentication**: JWT (djangorestframework-simplejwt)
@@ -24,6 +25,7 @@ A full-stack web application that combines real-time chat with **Retrieval-Augme
 - **File Storage**: Django media files with document extraction
 
 ### Frontend
+
 - **Framework**: React 18
 - **Routing**: React Router v6
 - **HTTP Client**: Axios
@@ -31,6 +33,7 @@ A full-stack web application that combines real-time chat with **Retrieval-Augme
 - **State Management**: React Hooks (useState, useCallback, useEffect)
 
 ### Infrastructure
+
 - **Backend Server**: Gunicorn + Django development server
 - **Frontend Server**: React Scripts
 - **Deployment**: Render, Heroku, AWS, or DigitalOcean
@@ -97,6 +100,7 @@ QHub/
 ## 🚀 Installation & Setup
 
 ### Prerequisites
+
 - Python 3.8+
 - Node.js 14+
 - Git
@@ -153,6 +157,7 @@ The frontend will run on `http://localhost:3000`
 ## 🔑 Environment Variables
 
 ### Backend (.env)
+
 Create a `.env` file in the `backend/` directory:
 
 ```env
@@ -179,6 +184,7 @@ EMAIL_HOST_PASSWORD=your-app-password
 ```
 
 ### Frontend (.env)
+
 Create a `.env` file in the `frontend/` directory:
 
 ```env
@@ -188,17 +194,20 @@ REACT_APP_API_URL=https://your-backend-api.com
 ## 📱 API Endpoints
 
 ### Authentication
+
 - `POST /api/token/` - Obtain JWT token (login)
 - `POST /api/token/refresh/` - Refresh JWT token
 - `POST /api/users/signup/` - User registration
 
 ### Chat
+
 - `GET /api/chat/chats/` - List all user chats
 - `POST /api/chat/chats/` - Create new chat
 - `GET /api/chat/chats/{id}/messages/` - Get chat messages
 - `POST /api/chat/chats/{id}/messages/` - Send message & get AI response
 
 ### Documents
+
 - `POST /api/documents/upload/` - Upload document
 - `GET /api/documents/` - List user documents
 - `DELETE /api/documents/{id}/` - Delete document
@@ -206,32 +215,38 @@ REACT_APP_API_URL=https://your-backend-api.com
 ## 💬 Usage
 
 ### 1. Signup
+
 - Navigate to `/signup`
 - Enter email and password
 - Account created automatically
 
 ### 2. Login
+
 - Navigate to `/login`
 - Enter email and password
 - Redirected to chat page
 
 ### 3. Chat
+
 - Click "+ New Chat" to start conversation
 - Type message and press Enter or click send button
 - AI responds with context from uploaded documents (if available)
 
 ### 4. Upload Document
+
 - Click "📁 Upload Document"
 - Select PDF or document file (max 100MB)
 - Document chunks stored in Chroma DB
 - Future messages use document excerpts for RAG
 
 ### 5. Document Mapping
+
 - Uploaded documents are linked to specific chats
 - AI retrieves top 3 relevant excerpts for each query
 - System prompt includes document context automatically
 
 ### 6. Mobile Responsive
+
 - On mobile: Click hamburger (☰) to open sidebar
 - Click X (✕) or overlay to close sidebar
 - Full chat functionality on all screen sizes
@@ -253,23 +268,28 @@ REACT_APP_API_URL=https://your-backend-api.com
 ### Common Errors & Solutions
 
 **404 on chat messages endpoint**
+
 - Django server cache issue
 - Solution: Restart server with `python manage.py runserver`
 
 **CORS errors**
+
 - Frontend and backend on different domains
 - Solution: Add domain to `CORS_ALLOWED_ORIGINS` in settings.py
 
 **Gemini API quota exceeded**
+
 - Solution: Check API usage in Google Cloud console
 - Free tier has rate limits, upgrade if needed
 
 **Document upload fails**
+
 - File size too large (max 100MB)
 - Unsupported file format
 - Chroma DB connection issue
 
 **Mobile sidebar not clickable**
+
 - Clear browser cache (Ctrl+Shift+Delete)
 - Verify `.close-btn` has `pointer-events: auto` in CSS
 
@@ -299,18 +319,21 @@ REACT_APP_API_URL=https://your-backend-api.com
 ## 📊 Database Schema
 
 ### Users Table
+
 - `id` (PK)
 - `email` (unique)
 - `password` (hashed)
 - `created_at`
 
 ### Chat Table
+
 - `id` (PK)
 - `user_id` (FK)
 - `title`
 - `created_at`
 
 ### Message Table
+
 - `id` (PK)
 - `chat_id` (FK)
 - `role` (user/assistant/system)
@@ -318,6 +341,7 @@ REACT_APP_API_URL=https://your-backend-api.com
 - `created_at`
 
 ### Document Table
+
 - `id` (PK)
 - `user_id` (FK)
 - `file` (uploaded file)
@@ -325,6 +349,7 @@ REACT_APP_API_URL=https://your-backend-api.com
 - `created_at`
 
 ### DocumentChatMapping Table
+
 - `id` (PK)
 - `document_id` (FK)
 - `chat_id` (FK)
@@ -353,6 +378,7 @@ REACT_APP_API_URL=https://your-backend-api.com
 ## 🤝 Contributing
 
 Contributions welcome! Please:
+
 1. Fork the repository
 2. Create feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit changes (`git commit -m 'Add amazing feature'`)
@@ -366,6 +392,7 @@ This project is open source and available under the MIT License.
 ## 👤 Author
 
 **Vinothini M**
+
 - GitHub: [@Vinothini31](https://github.com/Vinothini31)
 - Email: vinothinim012@gmail.com
 
@@ -379,6 +406,7 @@ This project is open source and available under the MIT License.
 ## 📞 Support
 
 For issues, questions, or suggestions:
+
 1. Open an issue on GitHub
 2. Email: vinothinim012@gmail.com
 3. Check documentation above
