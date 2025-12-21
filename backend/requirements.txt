@@ -1,0 +1,8 @@
+django
+djangorestframework
+djangorestframework-simplejwt
+python-dotenv
+PyPDF2
+python-docx
+google-genai
+chromadb
