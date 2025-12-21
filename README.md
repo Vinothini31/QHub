@@ -372,7 +372,6 @@ This project is open source and available under the MIT License.
 ## 🔗 Links
 
 - **GitHub Repository**: https://github.com/Vinothini31/QHub
-- **Live Demo**: (Add your deployed URL here)
 - **Google Gemini API**: https://ai.google.dev/
 - **Chroma DB**: https://www.trychroma.com/
 - **Django REST Framework**: https://www.django-rest-framework.org/
