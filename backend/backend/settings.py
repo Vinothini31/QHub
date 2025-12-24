@@ -49,7 +49,7 @@ INSTALLED_APPS = [
 
 # Middleware
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # Must be first
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -116,8 +116,13 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS
-CORS_ALLOW_ALL_ORIGINS = True
+# ✅ CORS - updated for local + hosted frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React dev server
+    "https://qhub-updated.onrender.com",  # Replace with your actual Render frontend URL
+]
+
+CORS_ALLOW_CREDENTIALS = True
 
 # DRF + JWT
 REST_FRAMEWORK = {
