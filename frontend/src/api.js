@@ -1,8 +1,9 @@
 import axios from "axios";
 
+// Base URL switches depending on environment
 const API = axios.create({
   baseURL:
-    window.location.hostname === "localhost"
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? "http://127.0.0.1:8000/api"
       : "https://qhub-backend-i3u4.onrender.com/api",
 });

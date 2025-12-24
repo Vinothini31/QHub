@@ -22,7 +22,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
 # ✅ FIXED ALLOWED_HOSTS (Render-safe)
 ALLOWED_HOSTS = os.getenv(
     "DJANGO_ALLOWED_HOSTS",
-    "localhost,127.0.0.1,.onrender.com"
+    "127.0.0.1,localhost,.onrender.com"
 ).split(",")
 
 # Applications
