@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "../styles/Login.css";
+import API from "../api"; // ✅ Added API import
 
 const Login = () => {
   const navigate = useNavigate();
@@ -19,32 +20,26 @@ const Login = () => {
     e.preventDefault();
 
     try {
-      // Call the JWT login endpoint
-      const response = await fetch("http://127.0.0.1:8000/api/token/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      // Use API instance from api.js
+      const response = await API.post("/token/", formData);
 
-      const data = await response.json();
+      const data = response.data;
       console.log("Login response:", data);
 
-      if (response.ok) {
-        alert("Login successful!");
+      alert("Login successful!");
 
-        // ✅ FIXED: Save tokens correctly for backend authentication
-        localStorage.setItem("token", data.access);
-        localStorage.setItem("refresh_token", data.refresh);
+      // ✅ Save tokens correctly
+      localStorage.setItem("token", data.access);
+      localStorage.setItem("refresh_token", data.refresh);
 
-        // Small delay to ensure token is saved before redirect
-        setTimeout(() => {
-          navigate("/chat");
-        }, 100);
-      } else {
-        alert("Error: " + JSON.stringify(data));
-      }
+      // Small delay to ensure token is saved before redirect
+      setTimeout(() => {
+        navigate("/chat");
+      }, 100);
+
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error:", error.response?.data || error);
+      alert("Login failed: " + JSON.stringify(error.response?.data));
     }
   };
 

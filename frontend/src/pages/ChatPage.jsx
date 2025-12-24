@@ -1,22 +1,24 @@
+// frontend/src/pages/ChatPage.jsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import ChatWindow from "../components/ChatWindow";
 import "../styles/chat.css";
-import api from "../api";
+import API from "../api"; // ✅ use API instance
 
 export default function ChatPage() {
   const [chats, setChats] = useState([]);
   const [currentChatId, setCurrentChatId] = useState(
-    localStorage.getItem("currentChatId") || null
+    Number(localStorage.getItem("currentChatId")) || null
   );
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  // Sidebar open state for mobile
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // 🔵 ADDED: upload states
+  // Upload states
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  const fileInputRef = useRef(null);
 
   // ---------------- AUTH CHECK ----------------
   useEffect(() => {
@@ -33,19 +35,20 @@ export default function ChatPage() {
   // ---------------- FETCH CHATS ----------------
   const fetchChats = useCallback(async () => {
     try {
-      const res = await api.get("/chat/chats/");
+      const res = await API.get("/chat/chats/");
       const chatList = res.data?.results || res.data || [];
       setChats(chatList);
 
-      const savedId = localStorage.getItem("currentChatId");
+      const savedId = Number(localStorage.getItem("currentChatId"));
       if (savedId) {
-        const chat = chatList.find(c => c.id === Number(savedId));
+        const chat = chatList.find(c => c.id === savedId);
         if (chat) {
           setCurrentChatId(chat.id);
           setMessages(chat.messages || []);
         }
       }
     } catch (err) {
+      console.error(err);
       if (err.response?.status === 401) window.location.href = "/login";
     }
   }, []);
@@ -65,23 +68,21 @@ export default function ChatPage() {
   // ---------------- NEW CHAT ----------------
   const handleNewChat = async () => {
     try {
-      const res = await api.post("/chat/chats/", { title: "" });
+      const res = await API.post("/chat/chats/", { title: "" });
       setChats([res.data, ...chats]);
       setCurrentChatId(res.data.id);
       localStorage.setItem("currentChatId", res.data.id);
       setMessages([]);
       setNewMessage("");
-      // close sidebar on mobile after creating
       setSidebarOpen(false);
       return res.data.id;
-    } catch {
+    } catch (err) {
+      console.error(err);
       return null;
     }
   };
 
   // ---------------- DOCUMENT UPLOAD ----------------
-  const fileInputRef = useRef(null);
-
   const handleUploadClick = () => {
     if (!uploading && fileInputRef.current) {
       fileInputRef.current.click();
@@ -104,7 +105,7 @@ export default function ChatPage() {
     setUploadProgress(0);
 
     try {
-      const res = await api.post("/documents/upload/", form, {
+      const res = await API.post("/documents/upload/", form, {
         headers: { "Content-Type": "multipart/form-data" },
         onUploadProgress: (progressEvent) => {
           const percent = Math.round(
@@ -142,11 +143,15 @@ export default function ChatPage() {
     if (chat) {
       setMessages(chat.messages || []);
     } else {
-      const res = await api.get(`/chat/chats/${id}/messages/`);
-      setMessages(res.data || []);
+      try {
+        const res = await API.get(`/chat/chats/${id}/messages/`);
+        setMessages(res.data || []);
+      } catch (err) {
+        console.error(err);
+        setMessages([]);
+      }
     }
     setNewMessage("");
-    // close sidebar on mobile after selecting
     setSidebarOpen(false);
   };
 
@@ -168,7 +173,7 @@ export default function ChatPage() {
     ]);
 
     try {
-      const res = await api.post(`/chat/chats/${chatId}/messages/`, {
+      const res = await API.post(`/chat/chats/${chatId}/messages/`, {
         content: userMsg.content,
       });
 
@@ -177,7 +182,8 @@ export default function ChatPage() {
           msg.id === placeholderId ? res.data.assistant_message : msg
         )
       );
-    } catch {
+    } catch (err) {
+      console.error(err);
       setMessages(prev =>
         prev.map(msg =>
           msg.id === placeholderId
@@ -190,11 +196,10 @@ export default function ChatPage() {
 
   return (
     <div className="chat-layout">
-      {/* Mobile backdrop overlay */}
       {sidebarOpen && (
         <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
       )}
-      
+
       <Sidebar
         chats={chats}
         onSelect={handleSelectChat}
@@ -205,7 +210,6 @@ export default function ChatPage() {
 
       <div className="chat-main">
         <div className="chat-top-bar">
-          {/* Hamburger shown on mobile */}
           <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open history">☰</button>
           <button className="new-chat-btn" onClick={handleNewChat}>
             + New Chat
@@ -227,7 +231,6 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* 🔵 Upload progress UI */}
         {uploading && (
           <div className="upload-progress-container">
             <div className="upload-progress-bar">
