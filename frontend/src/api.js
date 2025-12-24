@@ -1,7 +1,10 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://127.0.0.1:8000/api",
+  baseURL:
+    window.location.hostname === "localhost"
+      ? "http://127.0.0.1:8000/api"
+      : "https://qhub-backend-i3u4.onrender.com/api",
 });
 
 // Add token to every request automatically
