@@ -18,7 +18,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me-in-production")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+
+# ✅ FIXED ALLOWED_HOSTS (Render-safe)
+ALLOWED_HOSTS = os.getenv(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1,.onrender.com"
+).split(",")
 
 # Applications
 INSTALLED_APPS = [
@@ -77,9 +82,9 @@ WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database - SQLite
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / "db.sqlite3",
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
 
@@ -104,25 +109,25 @@ USE_TZ = True
 # Static & media
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-# Use WhiteNoise to serve compressed static files in production
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ⭐ CORS SETTINGS
+# CORS
 CORS_ALLOW_ALL_ORIGINS = True
 
-# ⭐ DRF + JWT Authentication
+# DRF + JWT
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
-    "rest_framework.permissions.AllowAny",
-),
+        "rest_framework.permissions.AllowAny",
+    ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 20,
 }
@@ -134,7 +139,7 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# Session settings
+# Session
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 7
 SESSION_SAVE_EVERY_REQUEST = False
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
@@ -156,12 +161,8 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": os.getenv("DJANGO_LOG_LEVEL", "INFO")},
 }
 
-# Helpful dev flags
-if DEBUG:
-    ALLOWED_HOSTS = ["*"]
-
-# When behind a proxy (like Render), honor X-Forwarded-Proto for HTTPS
+# When behind a proxy (Render)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# ⭐⭐⭐ GEMINI API KEY ⭐⭐⭐
+# GEMINI API KEY
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
