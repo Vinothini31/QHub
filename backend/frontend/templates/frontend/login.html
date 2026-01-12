@@ -1,0 +1,67 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login | QHub</title>
+    <link rel="stylesheet" href="{% static 'frontend/css/auth.css' %}">
+</head>
+<body>
+
+    <h2>Login</h2>
+
+    <!-- ❌ removed action="/chat/" -->
+    <form onsubmit="loginUser(event)">
+        <input type="text" id="username" placeholder="Username" required>
+        <input type="password" id="password" placeholder="Password" required>
+
+        <button type="submit">Login</button>
+    </form>
+
+    <p id="error" style="color:red; text-align:center;"></p>
+
+    <p>
+        New user?
+        <a href="/signup/">Create account</a>
+    </p>
+
+    <script>
+        function loginUser(event) {
+            event.preventDefault(); // 🚫 stop normal form submit
+
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            // ✅ FIXED ENDPOINT
+            fetch("/api/login/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || "Invalid username or password");
+                }
+                return response.json();
+            })
+            .then(data => {
+                // ✅ Save JWT tokens
+                localStorage.setItem("access", data.access);
+                localStorage.setItem("refresh", data.refresh);
+
+                // ✅ Redirect ONLY after successful login
+                window.location.href = "/chat/";
+            })
+            .catch(error => {
+                document.getElementById("error").innerText = error.message;
+            });
+        }
+    </script>
+
+</body>
+</html>

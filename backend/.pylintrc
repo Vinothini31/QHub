@@ -22,7 +22,7 @@ max-parents=15
 max-locals=20
 
 [TYPECHECK]
-ignored-modules=google.genai
+ignored-modules=google.generativeai
 
 [REPORTS]
 output-format=text

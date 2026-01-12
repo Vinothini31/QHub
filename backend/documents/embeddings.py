@@ -1,7 +1,7 @@
 import os
+import time
 from typing import List
 from django.conf import settings
-
 import google.generativeai as genai
 
 try:
@@ -9,145 +9,165 @@ try:
 except Exception:
     chromadb = None
 
-
 # -----------------------
 # CONFIGURE GEMINI API KEY
 # -----------------------
-API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=API_KEY)
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# Embedding model name
-EMBED_MODEL_NAME = "text-embedding-004"
-
+EMBED_MODEL_NAME = "models/text-embedding-004"
 
 # -----------------------
 # CHROMA DB DIRECTORY
 # -----------------------
 CHROMA_DIR = os.path.join(settings.BASE_DIR, "chroma_db")
 
+# -----------------------
+# GLOBAL CHROMA CLIENT (IMPORTANT FIX)
+# -----------------------
+_chroma_client = None
 
+
+def get_chroma_client():
+    global _chroma_client
+
+    if not chromadb:
+        return None
+
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+    return _chroma_client
+
+
+# -----------------------
+# TEXT CHUNKING
+# -----------------------
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
     if not text:
         return []
+
     chunks = []
-    start, length = 0, len(text)
+    start = 0
+    length = len(text)
 
     while start < length:
-        end = start + chunk_size
+        end = min(start + chunk_size, length)
         chunks.append(text[start:end])
         start = end - overlap
+        if start < 0:
+            start = end
 
     return chunks
 
 
 # -----------------------
-# NEW CHROMA CLIENT (NO WARNINGS)
-# -----------------------
-def get_chroma_client():
-    if not chromadb:
-        return None
-
-    try:
-        return chromadb.PersistentClient(path=CHROMA_DIR)
-    except Exception as e:
-        print("Chroma client error:", e)
-        return None
-
-
-# -----------------------
-# FIXED GEMINI EMBEDDING (CORRECT API)
+# GEMINI EMBEDDINGS
 # -----------------------
 def embed_texts(texts: List[str]) -> List[List[float]]:
     embeddings = []
-
-    for t in texts:
-        try:
-            res = genai.embed_content(
-                model=EMBED_MODEL_NAME,
-                content=t
-            )
-            embeddings.append(res["embedding"])
-        except Exception as e:
-            print("Embedding error:", e)
-            embeddings.append([])
-
+    for i, t in enumerate(texts):
+        print(f"🧠 Embedding chunk {i + 1}/{len(texts)}")
+        result = genai.embed_content(
+            model=EMBED_MODEL_NAME,
+            content=t,
+            task_type="retrieval_document"
+        )
+        embeddings.append(result["embedding"])
     return embeddings
 
 
 # -----------------------
 # UPSERT DOCUMENT EMBEDDINGS
 # -----------------------
-def upsert_document_embeddings(document):
+def upsert_document_embeddings(document, batch_size: int = 50):
     if not chromadb:
         print("Chroma not available; skipping embeddings")
         return
 
-    text = document.extracted_text or ""
-    chunks = chunk_text(text)
+    print("🔥 UPSERT FUNCTION CALLED FOR DOC:", document.id)
 
-    if not chunks:
+    text = document.extracted_text or ""
+    if not text.strip():
+        print("⚠️ No text to embed")
         return
 
-    embeddings = embed_texts(chunks)
     client = get_chroma_client()
-
     if not client:
         return
 
     collection_name = f"document_{document.id}"
-    collection = client.get_or_create_collection(name=collection_name)
-
-    ids = [f"{document.id}_{i}" for i in range(len(chunks))]
-    metadatas = [{"document_id": document.id, "chunk_index": i} for i in range(len(chunks))]
-
-    # Prevent empty embeddings from breaking Chroma
-    clean_embeddings = [emb if emb else [0.0] * 768 for emb in embeddings]
 
     try:
-        collection.add(
-            ids=ids,
-            embeddings=clean_embeddings,
-            metadatas=metadatas,
-            documents=chunks
-        )
-    except Exception as e:
-        print("Embedding upsert error:", e)
-        return
+        collection = client.get_collection(name=collection_name)
+    except chromadb.errors.NotFoundError:
+        collection = client.get_or_create_collection(name=collection_name)
+        print(f"ℹ️ Created new collection: {collection_name}")
 
-    try:
-        client.persist()
-    except:
-        pass
+    start = 0
+    length = len(text)
+    chunk_size = 1000
+    overlap = 200
+    chunk_index = 0
+
+    batch_chunks = []
+    batch_ids = []
+    batch_metadatas = []
+
+    while start < length:
+        end = min(start + chunk_size, length)
+        chunk = text[start:end]
+
+        batch_chunks.append(chunk)
+        batch_ids.append(f"{document.id}_{chunk_index}")
+        batch_metadatas.append({
+            "document_id": document.id,
+            "chunk_index": chunk_index,
+            "file_name": document.title
+        })
+
+        chunk_index += 1
+        start = end - overlap
+        if start < 0:
+            start = end
+
+        if len(batch_chunks) >= batch_size or start >= length:
+            embeddings = embed_texts(batch_chunks)
+            collection.upsert(
+                ids=batch_ids,
+                embeddings=embeddings,
+                metadatas=batch_metadatas,
+                documents=batch_chunks
+            )
+            batch_chunks.clear()
+            batch_ids.clear()
+            batch_metadatas.clear()
+
+    print(f"✅ Stored embeddings for document {document.id}")
 
 
 # -----------------------
-# QUERY DOCUMENT
+# QUERY DOCUMENT (RAG)
 # -----------------------
 def query_document(document_id: int, query: str, top_k: int = 5):
-
     client = get_chroma_client()
     if not client:
         return []
 
     try:
         collection = client.get_collection(name=f"document_{document_id}")
-    except:
+    except chromadb.errors.NotFoundError:
+        print("❌ Collection not found")
         return []
 
-    # Correct embedding call
-    try:
-        q = genai.embed_content(
-            model=EMBED_MODEL_NAME,
-            content=query
-        )
-        q_emb = q["embedding"]
-    except Exception as e:
-        print("Query embedding error:", e)
-        return []
+    q_result = genai.embed_content(
+        model=EMBED_MODEL_NAME,
+        content=query,
+        task_type="retrieval_query"
+    )
 
     try:
         results = collection.query(
-            query_embeddings=[q_emb],
+            query_embeddings=[q_result["embedding"]],
             n_results=top_k,
             include=["documents", "metadatas", "distances"]
         )
@@ -164,7 +184,9 @@ def query_document(document_id: int, query: str, top_k: int = 5):
         output.append({
             "text": docs[i],
             "metadata": metas[i],
-            "distance": dists[i]
+            "distance": dists[i],
+            "file_name": metas[i].get("file_name")
         })
+    print("🔎 Querying collection:", f"document_{document_id}")
 
     return output

@@ -1,10 +1,6 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import ChatViewSet
-
-router = DefaultRouter()
-router.register(r"chats", ChatViewSet, basename="chats")
+from django.urls import path
+from .views import gemini_chat
 
 urlpatterns = [
-    path("", include(router.urls)),
+    path("gemini/", gemini_chat, name="gemini_chat"),
 ]

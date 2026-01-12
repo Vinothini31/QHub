@@ -1,192 +1,121 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-
-from .models import Chat, Message
-from .serializers import ChatSerializer, MessageSerializer
-from django.db import transaction
-
-# optional document mapping for RAG
-try:
-    from documents.models import DocumentChatMapping
-except Exception:
-    DocumentChatMapping = None
-
-# embeddings helper (Chroma + Gemini)
-try:
-    from documents import embeddings as doc_embeddings
-except Exception:
-    doc_embeddings = None
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
-from google import genai  # Latest Gemini SDK
+import json
+import traceback
+import google.generativeai as genai
 
-# Load Gemini API key
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 
-# Initialize Gemini client
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# 🔽 RAG imports
+from documents.models import DocumentChatMapping
+from documents import embeddings as doc_embeddings
 
 
-def get_gemini_model():
+@csrf_exempt
+def gemini_chat(request):
     """
-    Safely pick a working Gemini model from your account.
+    Endpoint for Gemini AI chat with optional document-based RAG
     """
-    if not client:
-        return None
+    if request.method != "POST":
+        return JsonResponse({"error": "POST request required"}, status=405)
+
     try:
-        models_list = client.models.list()
-        # Pick first model whose name contains 'gemini' or 'bison' (chat/LLM model)
-        for m in models_list:
-            if "gemini" in m.name.lower() or "bison" in m.name.lower():
-                return m.name
-        # fallback to first model
-        if models_list:
-            return models_list[0].name
-        return None
-    except Exception as e:
-        print("Error fetching Gemini models:", e)
-        return None
+        data = json.loads(request.body or "{}")
+        user_message = data.get("message", "").strip()
+        chat_id = data.get("chat_id")
 
+        # -------------------- VALIDATION --------------------
+        if not user_message:
+            return JsonResponse({"error": "Empty message"}, status=400)
+        if not chat_id:
+            return JsonResponse({"error": "chat_id missing"}, status=400)
 
-class ChatViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    serializer_class = ChatSerializer
+        # -------------------- GEMINI CONFIG --------------------
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            return JsonResponse({"error": "Gemini API key missing"}, status=500)
 
-    def get_queryset(self):
-        # Prefetch messages so each chat returned by the API includes all messages
-        return Chat.objects.filter(
-            user=self.request.user
-        ).prefetch_related('messages').order_by("-created_at")
+        genai.configure(api_key=gemini_api_key)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        print("USER MESSAGE:", user_message)
+        print("CHAT ID RECEIVED:", chat_id)
 
-    @action(detail=True, methods=["get", "post"])
-    def messages(self, request, pk=None):
-        chat = get_object_or_404(self.get_queryset(), pk=pk)
-
-        if request.method == "GET":
-            msgs = chat.messages.order_by("created_at")
-            serializer = MessageSerializer(msgs, many=True)
-            return Response(serializer.data)
-
-        content = request.data.get("content", "").strip()
-        if not content:
-            return Response({"detail": "Empty message"}, status=400)
-
-        # Prepare user message but don't save yet — we'll persist only on success
-        user_msg = Message(chat=chat, role="user", content=content)
-        user_ser = MessageSerializer(user_msg)
-
-        # Build conversation lines
-        messages_for_llm = [
-            f"{m.role.capitalize()}: {m.content}"
-            for m in chat.messages.order_by("created_at")
-        ]
-
-        # If this chat maps to a document, try to retrieve relevant chunks via embeddings
+        # -------------------- RAG / DOCUMENT CONTEXT --------------------
+        rag_context = ""
         try:
-            if DocumentChatMapping:
-                mapping = (
-                    DocumentChatMapping.objects
-                    .filter(chat_id=chat.id)
-                    .select_related('document')
-                    .first()
-                )
-            else:
-                mapping = None
-        except Exception:
-            mapping = None
+            mapping = (
+                DocumentChatMapping.objects
+                .filter(chat_id=chat_id)
+                .select_related("document")
+                .first()
+            )
 
-        if mapping and mapping.document:
-            excerpts = []
-            try:
-                if doc_embeddings:
+            if mapping and mapping.document:
+                print("📄 USING DOCUMENT ID:", mapping.document.id)
+                try:
                     results = doc_embeddings.query_document(
-                        mapping.document.id, content, top_k=3
+                        document_id=mapping.document.id,
+                        query=user_message,
+                        top_k=4
                     )
-                    for r in results:
-                        excerpts.append(r.get('text')[:1200])
-                else:
-                    excerpts.append(mapping.document.extracted_text[:3000])
-            except Exception:
-                excerpts.append(mapping.document.extracted_text[:3000])
+                    if results:
+                        rag_context = "\n".join(
+                            [f"- {r.get('text', '').strip()}" for r in results if r.get("text")]
+                        )
+                        print("📄 RAG CONTEXT FOUND")
+                    else:
+                        print("ℹ️ No RAG results found, fallback to normal AI chat")
+                except Exception as e:
+                    print("⚠️ RAG retrieval failed:", e)
+                    print("ℹ️ Falling back to normal AI chat")
 
-            if excerpts:
-                sys_text = "\n\n".join(
-                    [f"Excerpt {i+1}:\n{e}" for i, e in enumerate(excerpts)]
-                )
-                messages_for_llm.insert(
-                    0, f"System: Relevant document excerpts:\n{sys_text}"
-                )
-
-        messages_for_llm.append(f"User: {content}")
-
-        # AI reply
-        assistant_text = call_llm_generate(messages_for_llm)
-
-        # If LLM reported quota/rate-limit, do not persist anything and
-        # return only the warning to the client.
-        quota_indicators = [
-            "RESOURCE_EXHAUSTED",
-            "request limits",
-            "quota",
-            "429",
-            "AI is busy",
-        ]
-        assistant_text_lower = assistant_text.lower() if assistant_text else ""
-        if any(indicator.lower() in assistant_text_lower for indicator in quota_indicators):
-            return Response({"detail": "Message quota limit reached."}, status=429)
-
-        # Persist both the user message and assistant reply atomically
-        try:
-            with transaction.atomic():
-                user_msg.save()
-                assistant_msg = Message.objects.create(
-                    chat=chat, role="assistant", content=assistant_text
-                )
         except Exception as e:
-            print("DB Save Error:", e)
-            return Response({"detail": "Failed to save messages."}, status=500)
+            print("⚠️ Document mapping error:", e)
+            rag_context = ""
 
-        assistant_ser = MessageSerializer(assistant_msg)
+        # -------------------- PROMPT BUILD --------------------
+        if rag_context:
+            final_prompt = f"""
+You are a strict document-based assistant.
 
-        return Response(
-            {
-                "user_message": user_ser.data,
-                "assistant_message": assistant_ser.data,
-            },
-            status=201,
-        )
+DOCUMENT CONTENT:
+{rag_context}
 
+USER QUESTION:
+{user_message}
 
-def call_llm_generate(conversation_lines):
-    """
-    Generate AI response using Gemini v1beta.
-    """
-    if not client:
-        return "Gemini API key missing."
+RULES:
+- Answer ONLY using the document content above.
+- Do NOT assume or guess.
+- If the answer is NOT found, reply exactly:
+"The information is not available in the document."
+"""
+            system_instruction = "You are a document-only assistant. Never answer outside the document content."
+        else:
+            final_prompt = user_message
+            system_instruction = "You are a helpful, friendly AI assistant. Answer naturally and clearly."
 
-    model_name = get_gemini_model()
-    if not model_name:
-        return "No valid Gemini model available."
+        # -------------------- GEMINI CALL --------------------
+        try:
+            model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash-lite",
+                system_instruction=system_instruction
+            )
+            response = model.generate_content(final_prompt)
+            reply_text = response.text.strip() if response.text else "The information is not available in the document."
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=conversation_lines
-        )
-        return response.text if response.text else "AI did not respond."
+        except Exception as e:
+            print("❌ GEMINI ERROR:", str(e))
+            traceback.print_exc()
+            return JsonResponse({"error": str(e)}, status=500)
+
+        print("AI REPLY:", reply_text)
+        return JsonResponse({"reply": reply_text})
 
     except Exception as e:
-        error_text = str(e)
-        print("Gemini Error:", error_text)
-
-        # ✅ ONLY ADDITION: quota / rate-limit handling
-        if "RESOURCE_EXHAUSTED" in error_text or "429" in error_text:
-            return "⚠️ AI is busy due to request limits. Please wait a minute and try again."
-
-        return "⚠️ AI service temporarily unavailable. Please try again later."
+        print("❌ SERVER ERROR:", str(e))
+        traceback.print_exc()
+        return JsonResponse({"error": str(e)}, status=500)
